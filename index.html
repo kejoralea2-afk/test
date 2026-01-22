@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LEA KILLER GEN V8 - PERMANENT</title>
+    <style>
+        :root { --neon: #00ff00; --bg: #0b0b0b; --gold: #ffaa00; --blood: #ff4d4d; --glass: rgba(255, 255, 255, 0.05); }
+        body, html { background: var(--bg); color: var(--neon); font-family: 'Segoe UI', sans-serif; margin: 0; height: 100vh; overflow: hidden; }
+        canvas#matrix { position: fixed; top: 0; left: 0; z-index: 1; opacity: 0.15; pointer-events: none; }
+        .app { position: relative; z-index: 10; display: flex; flex-direction: column; height: 100vh; padding: 10px; box-sizing: border-box; }
+        .brand { text-align: center; font-size: 18px; font-weight: 900; letter-spacing: 2px; color: #fff; text-shadow: 0 0 10px var(--neon); }
+        .clock { text-align: center; font-size: 11px; color: var(--gold); margin-bottom: 8px; }
+
+        .p-wrap { display: flex; justify-content: center; margin-bottom: 8px; }
+        .p-ring { width: 60px; height: 60px; border: 2px solid var(--neon); border-radius: 50%; background: url('https://i.postimg.cc/JhNdrVrn/FB-IMG-1754961772051.jpg') center/cover; animation: spinProfile 12s linear infinite; }
+        @keyframes spinProfile { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .gen-box { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; background: var(--glass); padding: 8px; border: 1px solid rgba(0,255,0,0.2); border-radius: 8px; margin-bottom: 8px; }
+        .full-col { grid-column: span 2; }
+        .input-group label { font-size: 7px; color: var(--gold); text-transform: uppercase; font-weight: bold; }
+        .gen-input { background: #000; border: 1px solid #333; color: #fff; padding: 6px; font-size: 11px; border-radius: 4px; outline: none; width: 100%; box-sizing: border-box; }
+        .gen-input:focus { border-color: var(--neon); }
+        
+        /* Tombol Hapus Key */
+        .key-row { display: flex; gap: 5px; }
+        .btn-clear-key { background: var(--blood); color: #fff; border: none; font-size: 8px; padding: 0 5px; border-radius: 3px; }
+
+        #viz-container { width: 100%; height: 30px; background: rgba(0,255,0,0.05); margin-bottom: 8px; border-radius: 4px; }
+        #visualizer { width: 100%; height: 100%; }
+
+        .btn-generate { width: 100%; padding: 12px; background: var(--neon); color: #000; border: none; font-weight: 900; border-radius: 5px; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; }
+
+        /* Area Daftar Lagu Permanen */
+        .list-container { position: relative; flex-grow: 1; border: 1px solid rgba(0,255,0,0.2); overflow: hidden; background: #000; border-radius: 8px 8px 0 0; margin-bottom: 60px; }
+        .list-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('https://i.postimg.cc/JhNdrVrn/FB-IMG-1754961772051.jpg') center/cover; opacity: 0.2; }
+        #playlist { position: relative; z-index: 5; height: 100%; overflow-y: auto; }
+        
+        .item { padding: 10px; border-bottom: 1px solid rgba(0,255,0,0.1); font-size: 11px; color: #aaa; display: flex; justify-content: space-between; align-items: center; }
+        .item-btns { display: flex; gap: 5px; }
+        .btn-dl { background: var(--gold); color: #000; border: none; padding: 5px; border-radius: 3px; font-size: 9px; font-weight: bold; }
+        .btn-del { background: var(--blood); color: #fff; border: none; padding: 5px; border-radius: 3px; font-size: 9px; }
+    </style>
+</head>
+<body onload="loadSavedData()">
+    <canvas id="matrix"></canvas>
+    <div class="app">
+        <div class="brand">LEA KILLER GEN V8</div>
+        <div class="clock" id="jam">00:00:00</div>
+
+        <div class="p-wrap"><div class="p-ring"></div></div>
+
+        <div class="gen-box">
+            <div class="input-group full-col">
+                <label>API KEY SYSTEM (AUTO-SAVE)</label>
+                <div class="key-row">
+                    <input type="password" id="apiKey" class="gen-input" placeholder="Masukkan API Key..." oninput="saveKey()">
+                    <button class="btn-clear-key" onclick="clearKey()">RESET</button>
+                </div>
+            </div>
+            <div class="input-group"><label>JUDUL</label><input type="text" id="songTitle" class="gen-input"></div>
+            <div class="input-group"><label>GAYA</label><input type="text" id="songStyle" class="gen-input"></div>
+            <div class="input-group full-col">
+                <label>VOCAL TYPE</label>
+                <select id="vocalType" class="gen-input">
+                    <option>PRIA</option><option>WANITA</option><option selected>DUET</option>
+                </select>
+            </div>
+            <div class="input-group full-col"><label>LIRIK</label><textarea id="lyrics" class="gen-input"></textarea></div>
+        </div>
+
+        <div id="viz-container"><canvas id="visualizer"></canvas></div>
+
+        <button class="btn-generate" onclick="generateMusic()">GENERATE & SAVE</button>
+
+        <div class="list-container">
+            <div class="list-bg"></div>
+            <div id="playlist"></div>
+        </div>
+    </div>
+
+    <audio id="engine" crossorigin="anonymous"></audio>
+
+    <script>
+        const audio = document.getElementById('engine');
+        let songs = [];
+        let context, analyser, src, canvas, ctxViz;
+
+        // 1. SAVE & LOAD API KEY
+        function saveKey() { localStorage.setItem('lk_apikey', document.getElementById('apiKey').value); }
+        function clearKey() { localStorage.removeItem('lk_apikey'); document.getElementById('apiKey').value = ''; }
+
+        // 2. SAVE & LOAD SONGS
+        function loadSavedData() {
+            // Muat API Key
+            const savedKey = localStorage.getItem('lk_apikey');
+            if(savedKey) document.getElementById('apiKey').value = savedKey;
+
+            // Muat Daftar Lagu
+            const savedSongs = localStorage.getItem('lk_songs');
+            if(savedSongs) {
+                songs = JSON.parse(savedSongs);
+                updatePlaylist();
+            }
+        }
+
+        function generateMusic() {
+            const title = document.getElementById('songTitle').value || "Untiled AI";
+            const newSong = { id: Date.now(), name: title + ".mp3", date: new Date().toLocaleDateString() };
+            
+            songs.push(newSong);
+            localStorage.setItem('lk_songs', JSON.stringify(songs)); // Simpan permanen
+            updatePlaylist();
+            alert('Lagu Berhasil Disimpan di Database Lokal!');
+        }
+
+        function deleteSong(id) {
+            songs = songs.filter(s => s.id !== id);
+            localStorage.setItem('lk_songs', JSON.stringify(songs));
+            updatePlaylist();
+        }
+
+        function updatePlaylist() {
+            const list = document.getElementById('playlist');
+            list.innerHTML = '';
+            songs.forEach((s) => {
+                const d = document.createElement('div');
+                d.className = 'item';
+                d.innerHTML = `
+                    <span>${s.name} (${s.date})</span>
+                    <div class="item-btns">
+                        <button class="btn-dl" onclick="alert('Mendownload ${s.name}...')">UNDUH</button>
+                        <button class="btn-del" onclick="deleteSong(${s.id})">HAPUS</button>
+                    </div>
+                `;
+                list.appendChild(d);
+            });
+        }
+
+        // --- Visualizer & Matrix Logic ---
+        setInterval(() => { document.getElementById('jam').innerText = new Date().toLocaleTimeString('id-ID'); }, 1000);
+        const canM = document.getElementById('matrix'); const ctxM = canM.getContext('2d');
+        canM.width = window.innerWidth; canM.height = window.innerHeight;
+        const drops = Array(Math.floor(canM.width/15)).fill(1);
+        function drawMatrix() {
+            ctxM.fillStyle = "rgba(0,0,0,0.05)"; ctxM.fillRect(0,0,canM.width,canM.height);
+            ctxM.fillStyle = "#0f0"; ctxM.font = "15px monospace";
+            drops.forEach((y, i) => {
+                ctxM.fillText(Math.floor(Math.random()*2), i*15, y*15);
+                if(y*15 > canM.height && Math.random() > 0.975) drops[i] = 0;
+                drops[i]++;
+            });
+        }
+        setInterval(drawMatrix, 50);
+    </script>
+</body>
+</html>
